@@ -7,7 +7,7 @@
 > It is always recommended to run as a normal user only; the script itself will prompt for the sudo password if necessary. Restart the machine after installing a specific theme.
 > After applying the theme, it is recommended to review and, if necessary, customize the added configuration files.
 > .old files allow you to restore the original configuration at any time.
-> The package names you put in "utilities.txt" must match the actual package names according to your package manager.
+> The package names you enter in "utilities.text" must match the actual package names as they appear in the package manager's repository.
 
 ## Table of Contents
 * [About](#-about)
