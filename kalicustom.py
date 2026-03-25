@@ -8,8 +8,52 @@ import json
 import shutil
 import logging
 import argparse
-import re
 from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+THEMES_DIR = SCRIPT_DIR / "themes"
+PACKAGES_JSON = THEMES_DIR / "packages.json"
+SUPPORTED_WALLPAPERS = ["kalitheme"]
+KALITHEME_PACKAGES_TXT = THEMES_DIR / "kalitheme" / "kalitheme-packages.txt"
+KALITHEME_WALLPAPERS_DIR = THEMES_DIR / "kalitheme" / "wallpapers"
+
+DISTRO_MAP = {
+    "arch": {
+        "manager": "pacman",
+        "cmds": {
+            "install": ["pacman", "-S", "--noconfirm"],
+            "remove": ["pacman", "-Rns", "--noconfirm"],
+        }
+    },
+    "void": {
+        "manager": "xbps-install",
+        "cmds": {
+            "install": ["xbps-install", "-Sy"],
+            "remove": ["xbps-remove", "-Ry"],
+        }
+    },
+    "debian": {
+        "manager": "apt",
+        "cmds": {
+            "install": ["apt", "install", "-y"],
+            "remove": ["apt", "remove", "-y"],
+        }
+    },
+    "ubuntu": {
+        "manager": "apt",
+        "cmds": {
+            "install": ["apt", "install", "-y"],
+            "remove": ["apt", "remove", "-y"],
+        }
+    },
+    "fedora": {
+        "manager": "dnf",
+        "cmds": {
+            "install": ["dnf", "install", "-y"],
+            "remove": ["dnf", "remove", "-y"],
+        }
+    }
+}
 
 class ColoredFormatter(logging.Formatter):
     GREY = "\x1b[38;20m"
@@ -41,12 +85,49 @@ def setup_logging() -> None:
     logger.addHandler(handler)
     logger.propagate = False
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-THEMES_DIR = SCRIPT_DIR / "themes"
-PACKAGES_JSON = THEMES_DIR / "packages.json"
-SUPPORTED_WALLPAPERS = ["kalitheme"]
-KALITHEME_PACKAGES_TXT = THEMES_DIR / "kalitheme" / "kalitheme-packages.txt"
-KALITHEME_WALLPAPERS_DIR = THEMES_DIR / "kalitheme" / "wallpapers"
+def detect_package_manager():
+    try:
+        with open("/etc/os-release") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        logging.error("Could not read /etc/os-release.")
+        sys.exit(1)
+
+    data = {}
+    for line in lines:
+        line = line.strip()
+        if not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            data[key.strip().lower()] = value.strip().strip('"').lower()
+
+    primary_id = data.get("id")
+    like_ids = data.get("id_like", "").split()
+
+    info = None
+    detected = None
+
+    if primary_id and primary_id in DISTRO_MAP:
+        info = DISTRO_MAP[primary_id]
+        detected = primary_id
+    else:
+        for like in like_ids:
+            if like in DISTRO_MAP:
+                info = DISTRO_MAP[like]
+                detected = like
+                break
+
+    if not info:
+        logging.error("Unsupported or undetected Linux distribution.")
+        sys.exit(1)
+
+    manager = info["manager"]
+
+    if not shutil.which(manager):
+        logging.critical(f"Package manager '{manager}' not found in PATH.")
+        sys.exit(1)
+
+    logging.info(f"Detected distro '{detected}' with package manager '{manager}'")
+    return info["cmds"]
 
 def run_subprocess(command: list[str], sudo: bool = False, check: bool = True) -> subprocess.CompletedProcess:
     if sudo:
@@ -57,8 +138,7 @@ def run_subprocess(command: list[str], sudo: bool = False, check: bool = True) -
     try:
         return subprocess.run(command, check=check, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
-        logging.error(f"Command failed: {' '.join(command)}")
-        logging.error(e)
+        logging.exception(f"Command failed: {' '.join(command)}")
         raise
     except FileNotFoundError:
         logging.error(f"Command not found: {command[0]}")
@@ -73,50 +153,34 @@ def read_utilities_list(utilities_list_path: Path) -> list[str]:
         logging.error(f"Utilities file '{utilities_list_path}' not found.")
         sys.exit(1)
 
-def needed_packages_check(packages_list: list) -> list:
-    return [pkg for pkg in packages_list if subprocess.run(["pacman", "-Q", pkg], capture_output=True).returncode != 0]
-
-def installed_packages_check(packages_list: list) -> list:
-    return [pkg for pkg in packages_list if subprocess.run(["pacman", "-Q", pkg], capture_output=True).returncode == 0]
-
 def install_utilities(utilities_list_path: Path):
     utilities = read_utilities_list(utilities_list_path)
+
     if not utilities:
         logging.warning("The utilities list is empty. No action will be taken.")
         return
 
-    packages_to_install = needed_packages_check(utilities)
-    
-    if not packages_to_install:
-        logging.info("All utilities are already installed. No action needed.")
-        return
-
-    logging.info(f"Installing utilities... (Packages to install: {', '.join(packages_to_install)})")
+    logging.info(f"Installing utilities... (Packages to install: {', '.join(utilities)})")
     
     try:
-        run_subprocess(["pacman", "-S", "--noconfirm"] + packages_to_install, True)
-        logging.info(f"Utilities {', '.join(packages_to_install)} were successfully installed.")
+        run_subprocess(PACKAGE_MANAGER["install"] + utilities, True)
+        logging.info(f"Utilities {', '.join(utilities)} were successfully installed.")
     except subprocess.CalledProcessError:
         logging.error("Failed to install the utilities.")
         sys.exit(1)
 
 def uninstall_utilities(utilities_list_path: Path):
     utilities = read_utilities_list(utilities_list_path)
+
     if not utilities:
         logging.warning("The utilities list is empty. No action will be taken.")
         return
 
-    packages_to_uninstall = installed_packages_check(utilities)
-    
-    if not packages_to_uninstall:
-        logging.info("No utilities are installed. No action needed.")
-        return
-
-    logging.info(f"Uninstalling utilities... (Packages to uninstall: {', '.join(packages_to_uninstall)})")
+    logging.info(f"Uninstalling utilities... (Packages to uninstall: {', '.join(utilities)})")
 
     try:
-        run_subprocess(["pacman", "-Rns", "--noconfirm"] + packages_to_uninstall, True)
-        logging.info(f"Utilities {', '.join(packages_to_uninstall)} were successfully uninstalled.")
+        run_subprocess(PACKAGE_MANAGER["remove"] + utilities, True)
+        logging.info(f"Utilities {', '.join(utilities)} were successfully uninstalled.")
     except subprocess.CalledProcessError:
         logging.error("Failed to uninstall the utilities.")
         sys.exit(1)
@@ -138,7 +202,8 @@ def safe_copy(src: Path, dst: Path) -> None:
     except PermissionError:
         logging.info(f"Retrying with sudo: {src} -> {dst}")
         run_subprocess(["cp", "-a", str(src), str(dst)], True)
-    except Exception:
+    except Exception as e:
+        logging.exception(f"Copy failed: {src} -> {dst}")
         pass
 
 def create_backup(path: Path) -> None:
@@ -197,14 +262,12 @@ def install_kalitheme():
     system_packages = json_data.get("System packages", {}).get("kalitheme", {})
     packages_configs = json_data.get("Packages config", {}).get("kalitheme", {})
 
-    packages_to_install = needed_packages_check(list(system_packages.keys()))
+    utilities = list(system_packages.keys())
 
-    if packages_to_install:
-        logging.info(f"Packages to be installed: {', '.join(packages_to_install)}")
-        KALITHEME_PACKAGES_TXT.write_text("\n".join(packages_to_install), encoding="utf-8")
+    if utilities:
+        logging.info(f"Packages to be installed: {', '.join(utilities)}")
+        KALITHEME_PACKAGES_TXT.write_text("\n".join(utilities), encoding="utf-8")
         install_utilities(KALITHEME_PACKAGES_TXT)
-    else:
-        logging.info("All required packages are already installed.")
 
     logging.info("[STARTING BACKUP PROCESS]")
     for pkg_cfg in system_packages.values():
@@ -220,7 +283,7 @@ def install_kalitheme():
             logging.info(f"Applying settings for {pkg}: {src_config} -> {dst_config}")
             config_apply(src_config, dst_config)
     
-    logging.info("KaliTheme installed successfully! 🎉")
+    logging.info("Kalitheme installed successfully!")
 
 def uninstall_kalitheme():
     logging.info("Uninstalling Kalitheme...")
@@ -235,30 +298,27 @@ def uninstall_kalitheme():
                 restore_from_backup(Path(path.strip()))
 
     CRITICAL_KEYWORDS = ("bash", "i3", "python")
-    packages_to_check = [pkg for pkg in system_packages if not any(keyword in pkg for keyword in CRITICAL_KEYWORDS)]
-    packages_to_uninstall = installed_packages_check(packages_to_check)
+    utilities = [pkg for pkg in system_packages if not any(keyword in pkg for keyword in CRITICAL_KEYWORDS)]
     
-    if packages_to_uninstall:
-        logging.info(f"Packages to be uninstalled: {', '.join(packages_to_uninstall)}")
-        KALITHEME_PACKAGES_TXT.write_text("\n".join(packages_to_uninstall), encoding="utf-8")
+    if utilities:
+        logging.info(f"Packages to be uninstalled: {', '.join(utilities)}")
+        KALITHEME_PACKAGES_TXT.write_text("\n".join(utilities), encoding="utf-8")
         uninstall_utilities(KALITHEME_PACKAGES_TXT)
     else:
         logging.info("No packages to uninstall.")
 
-    logging.info("KaliTheme uninstalled successfully!")
+    logging.info("Kalitheme uninstalled successfully!")
 
 def dynamic_background(sec: int, mode: str, wallpapers_path_str: str, wallpapers_type: str):
     if wallpapers_type not in SUPPORTED_WALLPAPERS:
         logging.error(f"Wallpaper type not supported. Supported: {SUPPORTED_WALLPAPERS}")
         sys.exit(1)
 
-    if "feh" in needed_packages_check(["feh"]):
-        logging.warning("feh not found. Installing...")
-        try:
-            run_subprocess(["pacman", "-S", "--noconfirm", "feh"], True)
-        except subprocess.CalledProcessError:
-            logging.error("Could not install feh. Aborting.")
-            sys.exit(1)
+    try:
+        run_subprocess(PACKAGE_MANAGER["install"] + ["feh"], True)
+    except subprocess.CalledProcessError:
+        logging.exception("Could not install feh. Aborting.")
+        sys.exit(1)
     
     wallpapers_path = expand_path(Path(wallpapers_path_str)) / wallpapers_type / "wallpapers"
     
@@ -273,7 +333,7 @@ def dynamic_background(sec: int, mode: str, wallpapers_path_str: str, wallpapers
 
     script_path = expand_path(Path("~/.dynamic_background.sh"))
     script_content = f"""#!/bin/bash
-# Auto-generated by AutoKALI
+# Auto-generated by Kalicustom
 while true; do
   mapfile -t W < <(find "{wallpapers_path}" -maxdepth 1 -type f)
   if [ ${{#W[@]}} -eq 0 ]; then
@@ -299,7 +359,7 @@ while true; do
     if i3_config_path.exists():
         answer = input(f"[*] Do you want to add '{script_path}' to i3 startup? (y/n): ").strip().lower()
         if answer == 'y':
-            exec_line = f"exec --no-startup-id {script_path} # by AutoKALI\n"
+            exec_line = f"exec --no-startup-id {script_path} # by Kalicustom\n"
             content = i3_config_path.read_text(encoding="utf-8")
             if exec_line not in content:
                 with open(i3_config_path, "a", encoding="utf-8") as f:
@@ -314,7 +374,7 @@ while true; do
 
 def main():
     parser = argparse.ArgumentParser(
-        description="AutoKALI: A tool to automate the installation and configuration of themes and utilities.",
+        description="Kalicustom: A tool to automate the installation and configuration of themes and utilities.",
         formatter_class=argparse.RawTextHelpFormatter
     )
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
@@ -345,6 +405,7 @@ def main():
 
 if __name__ == "__main__":
     setup_logging()
+    PACKAGE_MANAGER = detect_package_manager()
     try:
         main()
     except Exception as e:

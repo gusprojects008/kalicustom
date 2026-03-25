@@ -1,4 +1,4 @@
-# KaliArch
+# Kalicustom
 
 > [!WARNING]  
 > This script was developed for personal use and for virtual machines; use at your own risk.
@@ -7,6 +7,7 @@
 > It is always recommended to run as a normal user only; the script itself will prompt for the sudo password if necessary. Restart the machine after installing a specific theme.
 > After applying the theme, it is recommended to review and, if necessary, customize the added configuration files.
 > .old files allow you to restore the original configuration at any time.
+> The package names you put in "utilities.txt" must match the actual package names according to your package manager.
 
 ## Table of Contents
 * [About](#-about)
@@ -36,19 +37,19 @@
 
 ```bash
 # Install the packages listed in a file
-python3 kaliarch.py ​​install-utilities utilities.txt
+python3 kalicustom.py ​​install-utilities utilities.txt
 
 # Uninstall the packages listed in a file
-python3 kaliarch.py ​​uninstall-utilities utilities.txt
+python3 kalicustom.py ​​uninstall-utilities utilities.txt
 
 # Apply the Kali-like theme
-python3 kaliarch.py ​​install-kalitheme
+python3 kalicustom.py ​​install-kalitheme
 
 # Apply the Kali-like theme with dynamic wallpaper
-python3 kaliarch.py ​​dynamic-background 5 randomize ~ kalitheme
+python3 kalicustom.py ​​dynamic-background 5 randomize ~ kalitheme
 
 # You can also use the default order instead of random
-python3 kaliarch.py ​​dynamic-background 5 ordered ~ kalitheme
+python3 kalicustom.py ​​dynamic-background 5 ordered ~ kalitheme
 
 # Remove the Kali-like theme and restore backups
-python3 kaliarch.py ​​uninstall-kalitheme
+python3 kalicustom.py ​​uninstall-kalitheme
