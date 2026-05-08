@@ -49,8 +49,8 @@ floating_modifier $mod
 tiling_drag modifier titlebar
 
 # start a terminal
-bindsym $mod+Return exec alacritty
-exec --no-startup-id alacritty
+bindsym $mod+Return exec kitty
+exec --no-startup-id kitty
 
 # set keyboard layout
 exec --no-startup-id setxkbmap us intl

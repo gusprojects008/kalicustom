@@ -1,7 +1,7 @@
 {
   "System packages": {
     "kalitheme": {
-      "alacritty": "~/.config/alacritty.toml",
+      "kitty": "~/.config/kitty.conf",
       "tmux": ["~/.tmux", "~/.tmux.conf"],
       "feh": "~/.config/feh/.conf",
       "picom": "~/.config/picom/picom.conf",
@@ -20,7 +20,7 @@
   },
   "Packages config": {
     "kalitheme": {
-      "alacritty": "kalitheme/alacritty.toml",
+      "kitty": "kalitheme/kitty.conf",
       "tmux": ["kalitheme/.tmux", "kalitheme/.tmux.conf"],
       "picom": "kalitheme/picom.conf",
       "i3": "kalitheme/i3config",
