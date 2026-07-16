@@ -1,7 +1,7 @@
 {
   "System packages": {
     "kalitheme": {
-      "kitty": "~/.config/kitty.conf",
+      "kitty": "~/.config/kitty/kitty.conf",
       "tmux": ["~/.tmux", "~/.tmux.conf"],
       "feh": "~/.config/feh/.conf",
       "picom": "~/.config/picom/picom.conf",
